@@ -3,6 +3,7 @@ package com.projects.openaisqs.queue.awssqs
 import aws.sdk.kotlin.runtime.auth.credentials.StaticCredentialsProvider
 import aws.sdk.kotlin.services.sqs.SqsClient
 import aws.sdk.kotlin.services.sqs.model.*
+import aws.sdk.kotlin.services.sqs.model.QueueDoesNotExist
 import com.projects.openaisqs.queue.MessageId
 import com.projects.openaisqs.queue.QueueMessage
 import com.projects.openaisqs.queue.QueueService
@@ -55,15 +56,16 @@ class AwsSqsService(private val awsConfig: AwsConfig): QueueService {
         }
         try {
             getSQSClient().use { sqsClient ->
-                val result = sqsClient.getQueueUrl(getQueueUrlRequest)
-                if (result.queueUrl == null) {
-                    throw Exception("Failed to get queue: $result")
+                try {
+                    val result = sqsClient.getQueueUrl(getQueueUrlRequest)
+                    return result.queueUrl!!
+                } catch (e: QueueDoesNotExist) {
+                    logger.info("Queue $queueNameVal does not exist, creating")
+                    return this.createQueue(queueNameVal)
                 }
-
-                return result.queueUrl!!
             }
         } catch (e: Exception) {
-            logger.warn("Failed to get queue: $e")
+            logger.warn("Failed to get/create queue: $e")
             throw e
         }
     }
@@ -72,7 +74,6 @@ class AwsSqsService(private val awsConfig: AwsConfig): QueueService {
         val sendRequest = SendMessageRequest {
             queueUrl = queueUrlVal
             messageBody = message
-            delaySeconds = 10
         }
 
         try {
@@ -126,13 +127,31 @@ class AwsSqsService(private val awsConfig: AwsConfig): QueueService {
                 return result.messages!!.map{
                     QueueMessage (
                         it.messageId,
-                        it.body
+                        it.body,
+                        it.receiptHandle
                     )
                 }
             }
         } catch (e: Exception) {
             logger.warn("Failed to receive message: $e")
             throw e
+        }
+    }
+
+    override suspend fun deleteMessage(queueUrlVal: QueueUrl, receiptHandleVal: String?): Boolean {
+        val deleteMessageRequest = DeleteMessageRequest {
+            queueUrl = queueUrlVal
+            receiptHandle = receiptHandleVal
+        }
+
+        try {
+            getSQSClient().use { sqsClient ->
+                sqsClient.deleteMessage(deleteMessageRequest)
+                return true
+            }
+        } catch (e: Exception) {
+            logger.warn("Failed to delete message: $e")
+            return false
         }
     }
 

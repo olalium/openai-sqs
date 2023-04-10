@@ -4,7 +4,8 @@ typealias MessageId = String
 typealias QueueUrl = String
 data class QueueMessage (
     val messageId: MessageId?,
-    val body: String?
+    val body: String?,
+    val receiptHandle: String?
 )
 
 interface QueueService {
@@ -14,4 +15,5 @@ interface QueueService {
     suspend fun sendMessage(queueUrlVal: QueueUrl, message: String): MessageId
     suspend fun sendBatchMessages(queueUrlVal: QueueUrl, messages: List<String>): List<MessageId>
     suspend fun receiveBatchMessages(queueUrlVal: QueueUrl, maxNumberOfMessagesVal: Int?): List<QueueMessage>
+    suspend fun deleteMessage(queueUrlVal: QueueUrl, receiptHandleVal: String?): Boolean
 }
